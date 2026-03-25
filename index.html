@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dugout DJ: Walkup Manager</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #121212; color: white; padding: 15px; margin: 0; }
+        h1 { text-align: center; color: #00ff88; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #888; font-size: 0.9rem; margin-bottom: 20px; }
+        .player-card { 
+            background: #1e1e1e; border: 1px solid #333; border-radius: 12px; 
+            padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .header-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        input[type="text"], input[type="number"] {
+            background: #2a2a2a; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; font-size: 1rem;
+        }
+        .name { flex: 2; }
+        .number { width: 50px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; align-items: end; margin-top: 10px; }
+        button { 
+            background: #00ff88; border: none; padding: 12px; 
+            border-radius: 8px; font-weight: bold; cursor: pointer; color: #121212;
+        }
+        .stop-btn { background: #ff4444; color: white; }
+        .save-bar { position: sticky; top: 0; background: #121212; padding: 10px 0; z-index: 100; display: flex; justify-content: center; }
+        .save-btn { background: #0088ff; color: white; width: 80%; max-width: 300px; font-size: 1.1rem; }
+        label { font-size: 0.75rem; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        input[type="file"] { font-size: 0.8rem; margin-top: 5px; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="save-bar">
+        <button class="save-btn" onclick="saveRoster()">💾 SAVE PLAYER NAMES</button>
+    </div>
+
+    <h1>⚾ Walkup Manager</h1>
+    <p class="subtitle">15s Clip | Fade starts at 13s</p>
+    
+    <div id="roster"></div>
+
+    <script>
+        const ROSTER_SIZE = 20;
+        const rosterContainer = document.getElementById('roster');
+        let audioCtx = null;
+        let currentSource = null;
+
+        // Build the 20 slots
+        for (let i = 1; i <= ROSTER_SIZE; i++) {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            card.innerHTML = `
+                <div class="header-row">
+                    <div>
+                        <label>#</label><br>
+                        <input type="number" class="number" id="num-${i}" placeholder="00">
+                    </div>
+                    <div style="flex-grow:1">
+                        <label>Player Name</label><br>
+                        <input type="text" class="name" id="name-${i}" placeholder="Enter Name" style="width:100%">
+                    </div>
+                </div>
+                <div>
+                    <label>Audio File</label><br>
+                    <input type="file" id="file-${i}" accept="audio/*">
+                </div>
+                <div class="controls">
+                    <div>
+                        <label>Start(s)</label>
+                        <input type="number" id="start-${i}" value="0" style="width: 100%">
+                    </div>
+                    <button onclick="playSong(${i})">PLAY</button>
+                    <button class="stop-btn" onclick="stopSong()">STOP</button>
+                </div>
+            `;
+            rosterContainer.appendChild(card);
+        }
+
+        // Load saved data on startup
+        window.onload = () => {
+            for (let i = 1; i <= ROSTER_SIZE; i++) {
+                if (localStorage.getItem(`player-name-${i}`)) {
+                    document.getElementById(`name-${i}`).value = localStorage.getItem(`player-name-${i}`);
+                    document.getElementById(`num-${i}`).value = localStorage.getItem(`player-num-${i}`);
+                    document.getElementById(`start-${i}`).value = localStorage.getItem(`player-start-${i}`);
+                }
+            }
+        };
+
+        function saveRoster() {
+            for (let i = 1; i <= ROSTER_SIZE; i++) {
+                localStorage.setItem(`player-name-${i}`, document.getElementById(`name-${i}`).value);
+                localStorage.setItem(`player-num-${i}`, document.getElementById(`num-${i}`).value);
+                localStorage.setItem(`player-start-${i}`, document.getElementById(`start-${i}`).value);
+            }
+            alert("Roster Saved! Names will remain even if you refresh.");
+        }
+
+        async function playSong(id) {
+            const fileInput = document.getElementById(`file-${id}`);
+            const startTime = parseFloat(document.getElementById(`start-${id}`).value) || 0;
+            
+            if (!fileInput.files[0]) {
+                alert("Select a file for this player first!");
+                return;
+            }
+
+            stopSong(); 
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            const arrayBuffer = await fileInput.files[0].arrayBuffer();
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+            const source = audioCtx.createBufferSource();
+            const gainNode = audioCtx.createGain();
+
+            source.buffer = audioBuffer;
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            const duration = 15;
+            const fadeStart = 13;
+
+            gainNode.gain.setValueAtTime(1, now + fadeStart);
+            gainNode.gain.linearRampToValueAtTime(0, now + duration);
+
+            source.start(0, startTime);
+            source.stop(now + duration);
+            currentSource = source;
+        }
+
+        function stopSong() {
+            if (currentSource) {
+                try { currentSource.stop(); } catch(e) {}
+                currentSource = null;
+            }
+        }
+    </script>
+</body>
+</html>
